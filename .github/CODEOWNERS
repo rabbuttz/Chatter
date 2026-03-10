@@ -1,0 +1,11 @@
+# Default owner
+* @rabbuttz
+
+# Shared contracts and UI require lead review
+/packages/domain/ @rabbuttz
+/packages/ui/ @rabbuttz
+/packages/inquiry-engine/ @rabbuttz
+/packages/db/ @rabbuttz
+/apps/web/ @rabbuttz
+/MultiAgent実装計画_v_0.md @rabbuttz
+/技術基盤選定_v_0.md @rabbuttz

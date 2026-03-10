@@ -332,6 +332,8 @@ export const notificationSummarySchema = z.object({
   summary: z.string().min(1),
   suggestedAction: z.string().min(1),
   userMessagePreview: z.string().min(1),
+  referenceTitles: z.array(z.string()).default([]),
+  createdAt: z.string().min(1).optional(),
 });
 
 export type NotificationSummary = z.infer<typeof notificationSummarySchema>;
@@ -347,6 +349,9 @@ export const inquiryRecordSchema = z.object({
   rawMessage: z.string().min(1),
   responsePreview: z.string().optional(),
   summary: z.string().optional(),
+  matchedSourceIds: z.array(z.string()).default([]),
+  matchedSourceTitles: z.array(z.string()).default([]),
+  createdAt: z.string().min(1).optional(),
 });
 
 export type InquiryRecord = z.infer<typeof inquiryRecordSchema>;

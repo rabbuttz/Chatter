@@ -31,8 +31,8 @@
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
   --color-warning-strong: var(--warning-strong);
-  --font-sans: var(--font-display);
-  --font-mono: var(--font-mono);
+  --font-sans: "Manrope";
+  --font-mono: "IBM Plex Mono";
 }
 
 * {
@@ -51,7 +51,7 @@ body {
     radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 28%),
     radial-gradient(circle at bottom right, rgba(217, 119, 6, 0.12), transparent 24%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(246, 239, 227, 0.98));
-  font-family: var(--font-display), sans-serif;
+  font-family: "Manrope", "Hiragino Sans", "Yu Gothic UI", sans-serif;
 }
 
 a {

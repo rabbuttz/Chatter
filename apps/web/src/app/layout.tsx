@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Manrope } from "next/font/google";
+
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/manrope/400.css";
+import "@fontsource/manrope/500.css";
+import "@fontsource/manrope/600.css";
+import "@fontsource/manrope/700.css";
+
 import "./globals.css";
-
-const displayFont = Manrope({
-  variable: "--font-display",
-  subsets: ["latin"],
-});
-
-const monoFont = IBM_Plex_Mono({
-  variable: "--font-mono",
-  weight: ["400", "500"],
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Ichijiuke MVP Workspace",
@@ -25,9 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      <body className={`${displayFont.variable} ${monoFont.variable} antialiased`}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

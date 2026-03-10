@@ -2,7 +2,12 @@ import Link from "next/link";
 import { adminRoutes, intakeCategories, sellerTypes } from "@ichijiuke/domain";
 import { MetricCard, SectionCard, StatusBadge } from "@ichijiuke/ui";
 
-export default function Home() {
+import { logoutDemoAction } from "@/app/actions/auth";
+import { getDemoSession } from "@/lib/auth";
+
+export default async function Home() {
+  const session = await getDemoSession();
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-6 py-10 lg:px-10">
       <section className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
@@ -15,7 +20,18 @@ export default function Home() {
             <StatusBadge tone="accent">leader: xhigh 相当</StatusBadge>
             <StatusBadge tone="neutral">workers: high 相当</StatusBadge>
             <StatusBadge tone="warning">MVP first</StatusBadge>
+            {session ? <StatusBadge tone="accent">{session.email}</StatusBadge> : null}
           </div>
+          {session ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-muted">
+              <p>demo session: {session.displayName}</p>
+              <form action={logoutDemoAction}>
+                <button className="font-semibold text-accent" type="submit">
+                  sign out
+                </button>
+              </form>
+            </div>
+          ) : null}
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <MetricCard label="workspace" value="apps + packages" note="責務単位で分離" />
             <MetricCard label="routes" value={String(adminRoutes.length + 3)} note="admin + public" />
@@ -38,14 +54,14 @@ export default function Home() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
-        <Link href="/signup">
+        <Link href={session ? "/setup" : "/signup"}>
           <SectionCard eyebrow="Entry" title="販売者導線" description="登録画面と公開までの最短導線を確認する。">
-            <p className="text-sm text-muted">`/signup` と `/setup` を先行着手</p>
+            <p className="text-sm text-muted">{session ? "`/setup` へ直行" : "`/signup` と `/setup` を先行着手"}</p>
           </SectionCard>
         </Link>
-        <Link href="/dashboard">
+        <Link href={session ? "/dashboard" : "/login"}>
           <SectionCard eyebrow="Admin" title="管理画面" description="ダッシュボード、設定、履歴の導線を俯瞰する。">
-            <p className="text-sm text-muted">Worker 03-10 の受け皿</p>
+            <p className="text-sm text-muted">{session ? "demo session で入場可能" : "未ログイン時は `/login` へ誘導"}</p>
           </SectionCard>
         </Link>
         <Link href="/c/demo-shop">

@@ -13,3 +13,21 @@ node_modules/
 dist/
 build/
 coverage/
+.next/
+.turbo/
+out/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Deployment
+.vercel/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

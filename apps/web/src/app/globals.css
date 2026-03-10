@@ -1,0 +1,64 @@
+@import "tailwindcss";
+@source "../../../../packages/ui/src/**/*.{ts,tsx}";
+
+:root {
+  --background: #f6efe3;
+  --foreground: #181716;
+  --surface: rgba(255, 251, 245, 0.84);
+  --surface-strong: #fff8ef;
+  --surface-subtle: #fffcf7;
+  --muted: #746b60;
+  --line: rgba(24, 23, 22, 0.12);
+  --accent: #0f766e;
+  --accent-strong: #0b5d56;
+  --accent-soft: #d4f4ef;
+  --warning: #d97706;
+  --warning-soft: #fff1dd;
+  --warning-strong: #b45309;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-strong: var(--warning-strong);
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  background-image:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(217, 119, 6, 0.12), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(246, 239, 227, 0.98));
+  font-family: var(--font-display), sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(15, 118, 110, 0.18);
+}

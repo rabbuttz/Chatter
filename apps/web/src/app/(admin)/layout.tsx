@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { AdminFrame } from "@/components/admin-frame";
 import { getDemoSession } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({
   children,
 }: Readonly<{

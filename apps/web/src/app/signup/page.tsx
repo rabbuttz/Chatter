@@ -6,6 +6,8 @@ import { SectionCard, StatusBadge } from "@ichijiuke/ui";
 import { signupDemoAction } from "@/app/actions/auth";
 import { getDemoSession } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 type SignupPageProps = {
   searchParams: Promise<{
     error?: string;

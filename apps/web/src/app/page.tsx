@@ -5,6 +5,8 @@ import { MetricCard, SectionCard, StatusBadge } from "@ichijiuke/ui";
 import { logoutDemoAction } from "@/app/actions/auth";
 import { getDemoSession } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const session = await getDemoSession();
 

@@ -3,6 +3,7 @@ import { MetricCard, SectionCard, StatusBadge } from "@ichijiuke/ui";
 
 import { getDemoSession } from "@/lib/auth";
 import { getDemoWorkspace, getWorkspaceMetrics } from "@/lib/demo-workspace";
+import { getInquiryResponseMode } from "@/lib/env";
 
 export default async function InboxPage() {
   const session = await getDemoSession();
@@ -13,6 +14,7 @@ export default async function InboxPage() {
 
   const workspace = await getDemoWorkspace(session);
   const metrics = getWorkspaceMetrics(workspace);
+  const inquiryResponseMode = getInquiryResponseMode();
 
   return (
     <>
@@ -24,6 +26,9 @@ export default async function InboxPage() {
         <div className="flex flex-wrap gap-2">
           <StatusBadge tone="accent">summary first</StatusBadge>
           <StatusBadge tone="neutral">raw later</StatusBadge>
+          <StatusBadge tone="neutral">
+            {inquiryResponseMode === "openai" ? "openai active" : "rules fallback"}
+          </StatusBadge>
           <StatusBadge tone={metrics.urgentCount > 0 ? "warning" : "neutral"}>
             urgent {metrics.urgentCount}
           </StatusBadge>
@@ -59,6 +64,10 @@ export default async function InboxPage() {
                   <div className="flex flex-wrap gap-2">
                     <StatusBadge tone={notification?.urgency === "urgent" ? "warning" : "accent"}>
                       {notification?.urgency ?? inquiry.notificationMode}
+                    </StatusBadge>
+                    <StatusBadge tone="neutral">
+                      {inquiry.responseSource}
+                      {inquiry.responseModel ? `:${inquiry.responseModel}` : ""}
                     </StatusBadge>
                     <StatusBadge tone="neutral">{inquiry.status}</StatusBadge>
                   </div>

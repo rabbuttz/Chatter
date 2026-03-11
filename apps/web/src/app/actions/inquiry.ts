@@ -1,6 +1,5 @@
 "use server";
 
-import { evaluateInquiry } from "@ichijiuke/inquiry-engine";
 import { revalidatePath } from "next/cache";
 
 import { getDemoSession } from "@/lib/auth";
@@ -10,6 +9,7 @@ import {
   saveDemoWorkspace,
 } from "@/lib/demo-workspace";
 import { isProductionPersistenceEnabled } from "@/lib/env";
+import { evaluateInquiryWithFallback } from "@/lib/inquiry-ai";
 
 function getValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -32,7 +32,7 @@ export async function submitPublicInquiryAction(formData: FormData) {
     return;
   }
 
-  const result = evaluateInquiry({
+  const result = await evaluateInquiryWithFallback({
     message,
     sellerType: workspace.settings.sellerType,
     policies: workspace.settings.policies,
@@ -58,6 +58,8 @@ export async function submitPublicInquiryAction(formData: FormData) {
         summary: result.summary,
         matchedSourceIds: result.matchedSourceIds,
         matchedSourceTitles: result.matchedSourceTitles,
+        responseSource: result.responseSource,
+        responseModel: result.responseModel,
         createdAt,
       },
       ...workspace.inquiries,

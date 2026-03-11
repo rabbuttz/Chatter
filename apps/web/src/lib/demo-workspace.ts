@@ -182,6 +182,7 @@ function buildSeedInquiries(
       summary: "返品条件の確認。規約案内で完結可能。",
       matchedSourceIds: [`${sellerId}-policy-main`],
       matchedSourceTitles: ["返品・キャンセル規約"],
+      responseSource: "rules",
       createdAt: nowIso(),
     },
     {
@@ -197,6 +198,7 @@ function buildSeedInquiries(
       summary: "未着相談。配送状況確認が必要。",
       matchedSourceIds: [`${sellerId}-faq-shipping`],
       matchedSourceTitles: ["発送目安"],
+      responseSource: "rules",
       createdAt: nowIso(),
     },
   ];

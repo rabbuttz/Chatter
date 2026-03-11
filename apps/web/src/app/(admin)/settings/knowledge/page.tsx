@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/workspace";
 import { getDemoSession } from "@/lib/auth";
 import { getDemoWorkspace, getKnowledgeSourcesByType } from "@/lib/demo-workspace";
+import { getInquiryResponseMode } from "@/lib/env";
 
 const inputClassName =
   "rounded-[18px] border border-line bg-surface-strong px-4 py-3 text-sm outline-none";
@@ -20,6 +21,8 @@ export default async function KnowledgeSettingsPage() {
 
   const workspace = await getDemoWorkspace(session);
   const groupedSources = getKnowledgeSourcesByType(workspace);
+  const inquiryResponseMode = getInquiryResponseMode();
+  const isOpenAIBacked = inquiryResponseMode === "openai";
 
   return (
     <>
@@ -29,10 +32,18 @@ export default async function KnowledgeSettingsPage() {
         description="AI の返答根拠をここに集めます。published を増やすほど、public chat の自由回答幅を狭められます。"
       >
         <div className="flex flex-wrap gap-2">
+          <StatusBadge tone={isOpenAIBacked ? "accent" : "neutral"}>
+            {isOpenAIBacked ? "OpenAI grounded" : "rules fallback"}
+          </StatusBadge>
           <StatusBadge tone="accent">faq first</StatusBadge>
           <StatusBadge tone="neutral">policy redirect</StatusBadge>
           <StatusBadge tone="neutral">{workspace.knowledgeSources.length} sources</StatusBadge>
         </div>
+        <p className="mt-4 text-sm leading-7 text-muted">
+          {isOpenAIBacked
+            ? "公開中の FAQ / 規約は OpenAI 返答の根拠として使われます。曖昧な案内を減らしたい項目から published を増やしてください。"
+            : "現在は rules fallback です。OPENAI_API_KEY 未設定でも、published な FAQ / 規約を増やすほど固定回答の精度を上げられます。"}
+        </p>
       </SectionCard>
 
       <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">

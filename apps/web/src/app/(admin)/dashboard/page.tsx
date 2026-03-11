@@ -2,6 +2,7 @@ import { MetricCard, SectionCard, StatusBadge } from "@ichijiuke/ui";
 
 import { getDemoSession } from "@/lib/auth";
 import { getDemoWorkspace, getWorkspaceMetrics } from "@/lib/demo-workspace";
+import { getInquiryResponseMode } from "@/lib/env";
 
 function buildNextActions(args: {
   completionPercent: number;
@@ -41,6 +42,8 @@ export default async function DashboardPage() {
   }
 
   const workspace = await getDemoWorkspace(session);
+  const inquiryResponseMode = getInquiryResponseMode();
+  const isOpenAIBacked = inquiryResponseMode === "openai";
   const metrics = getWorkspaceMetrics(workspace);
   const recentNotifications = workspace.notifications.slice(0, 3);
   const nextActions = buildNextActions({
@@ -63,10 +66,18 @@ export default async function DashboardPage() {
             {metrics.published ? "published" : workspace.settings.publicStatus}
           </StatusBadge>
           <StatusBadge tone="neutral">{workspace.settings.publicSlug}</StatusBadge>
+          <StatusBadge tone={isOpenAIBacked ? "accent" : "neutral"}>
+            {isOpenAIBacked ? "OpenAI replies" : "rules fallback"}
+          </StatusBadge>
           <StatusBadge tone={metrics.urgentCount > 0 ? "warning" : "neutral"}>
             urgent {metrics.urgentCount}
           </StatusBadge>
         </div>
+        <p className="mt-4 text-sm leading-7 text-muted">
+          {isOpenAIBacked
+            ? "現在の一次受けは OpenAI を使い、published な FAQ / 規約を根拠として返答します。"
+            : "現在の一次受けは rules fallback です。OPENAI_API_KEY が未設定でも FAQ / 規約ベースで返答します。"}
+        </p>
       </SectionCard>
 
       <div className="grid gap-4 lg:grid-cols-5">
@@ -76,7 +87,11 @@ export default async function DashboardPage() {
           note="公開前に必要な設定の充足率"
         />
         <MetricCard label="inquiries" value={String(metrics.totalInquiries)} note="保存済みの問い合わせ件数" />
-        <MetricCard label="auto closed" value={String(metrics.autoClosedCount)} note="AI / 規約案内で完結" />
+        <MetricCard
+          label="auto closed"
+          value={String(metrics.autoClosedCount)}
+          note={isOpenAIBacked ? "OpenAI + 規約案内で完結" : "rules + 規約案内で完結"}
+        />
         <MetricCard label="handoff" value={String(metrics.handoffCount)} note="販売者確認が必要" />
         <MetricCard label="notifications" value={String(metrics.notificationCount)} note="summary + urgent の合計" />
       </div>

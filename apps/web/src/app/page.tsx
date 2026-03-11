@@ -10,6 +10,7 @@ import {
   isProductionAuthEnabled,
 } from "@/lib/auth";
 import { getDemoWorkspace } from "@/lib/demo-workspace";
+import { getInquiryResponseMode } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function Home() {
   const session = await getDemoSession();
   const isProductionAuth = isProductionAuthEnabled();
   const isDemoMode = isDemoFallbackEnabled();
+  const inquiryResponseMode = getInquiryResponseMode();
   const workspace = session ? await getDemoWorkspace(session) : null;
   const publicHref = (
     workspace ? `/c/${workspace.settings.publicSlug}` : isDemoMode ? "/c/demo-shop" : "/signup"
@@ -35,6 +37,9 @@ export default async function Home() {
               {isProductionAuth ? "production mode" : "local demo mode"}
             </StatusBadge>
             <StatusBadge tone="neutral">Next.js + Postgres</StatusBadge>
+            <StatusBadge tone={inquiryResponseMode === "openai" ? "accent" : "neutral"}>
+              {inquiryResponseMode === "openai" ? "OpenAI replies" : "rules fallback"}
+            </StatusBadge>
             <StatusBadge tone="warning">seller ops</StatusBadge>
             {session ? <StatusBadge tone="accent">{session.email}</StatusBadge> : null}
           </div>
@@ -67,6 +72,11 @@ export default async function Home() {
             <li>`packages/ui`: 共有シェルと表示部品</li>
             <li>`packages/db`: DB / 監査 / 履歴の受け皿</li>
           </ul>
+          <p className="mt-4 text-sm text-muted">
+            {inquiryResponseMode === "openai"
+              ? "現在は OpenAI を使った grounded reply が有効です。"
+              : "現在は OpenAI 未設定のため rules fallback で動作します。"}
+          </p>
         </SectionCard>
       </section>
 

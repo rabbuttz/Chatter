@@ -7,6 +7,7 @@ import {
   type InquiryStatus,
   type KnowledgeSource,
   type NotificationMode,
+  type ResponseSource,
   type SellerPolicy,
   type SellerType,
 } from "@ichijiuke/domain";
@@ -40,6 +41,18 @@ export type InquiryEngineResult = {
   suggestedAction: string;
   matchedSourceIds: string[];
   matchedSourceTitles: string[];
+  responseSource: ResponseSource;
+  responseModel?: string;
+};
+
+export type InquiryDecision = {
+  categoryCode: string;
+  matchedSourceIds?: string[];
+  matchedSourceTitles?: string[];
+  reply?: string;
+  summary?: string;
+  responseSource?: ResponseSource;
+  responseModel?: string;
 };
 
 type Rule = {
@@ -245,6 +258,24 @@ function matchKnowledgeSources(
     .sort((left, right) => right.score - left.score);
 }
 
+function resolveMatchedSources(
+  knowledgeSources: KnowledgeSource[],
+  input: InquiryDecision,
+) {
+  const matchedById = (input.matchedSourceIds ?? [])
+    .map((sourceId) => knowledgeSources.find((source) => source.id === sourceId))
+    .filter((source): source is KnowledgeSource => Boolean(source));
+  const matchedByTitle = (input.matchedSourceTitles ?? [])
+    .map((title) => knowledgeSources.find((source) => source.title === title))
+    .filter((source): source is KnowledgeSource => Boolean(source));
+  const matchedSources = unique([...matchedById, ...matchedByTitle]).slice(0, 3);
+
+  return {
+    matchedSourceIds: matchedSources.map((source) => source.id),
+    matchedSourceTitles: matchedSources.map((source) => source.title),
+  };
+}
+
 function detectCategory(
   message: string,
   sellerType: SellerType,
@@ -399,33 +430,59 @@ function composeReply(
   return `${toneOpeners[tone]} ${category.summary}${referenceText}`;
 }
 
-export function evaluateInquiry(
-  input: InquiryEngineInput,
+function buildDefaultSummary(message: string, categoryCode: string) {
+  const category = intakeCategoryByCode[categoryCode] ?? intakeCategories[intakeCategories.length - 1];
+
+  return `${category.summary} 問い合わせ要点: ${shortMessage(message, 56)}`;
+}
+
+function resolveReply({
+  categoryCode,
+  tone,
+  matchedSourceTitles,
+  handlingMode,
+  reply,
+}: {
+  categoryCode: string;
+  tone: AutoReplyTone;
+  matchedSourceTitles: string[];
+  handlingMode: HandlingMode;
+  reply?: string;
+}) {
+  if (handlingMode === "urgent_handoff") {
+    return composeReply(categoryCode, tone, matchedSourceTitles, handlingMode);
+  }
+
+  const trimmedReply = reply?.trim();
+
+  if (!trimmedReply) {
+    return composeReply(categoryCode, tone, matchedSourceTitles, handlingMode);
+  }
+
+  return trimmedReply;
+}
+
+export function finalizeInquiryDecision(
+  input: InquiryEngineInput & InquiryDecision,
 ): InquiryEngineResult {
   const tone = input.tone ?? "neutral";
-  const { categoryCode, knowledgeMatches } = detectCategory(
-    input.message,
-    input.sellerType,
+  const category = intakeCategoryByCode[input.categoryCode] ?? intakeCategories[intakeCategories.length - 1];
+  const { matchedSourceIds, matchedSourceTitles } = resolveMatchedSources(
     input.knowledgeSources,
+    input,
   );
-  const category = intakeCategoryByCode[categoryCode] ?? intakeCategories[intakeCategories.length - 1];
-  const matchedSources = knowledgeMatches.slice(0, 3).map((item) => item.source);
-  const matchedSourceIds = matchedSources.map((source) => source.id);
-  const matchedSourceTitles = matchedSources.map((source) => source.title);
-  const { handlingMode, notificationMode } = resolveHandling(
-    category.code,
-    input.policies,
-  );
+  const { handlingMode, notificationMode } = resolveHandling(category.code, input.policies);
   const inquiryStatus = resolveStatus(handlingMode);
   const headline = `${category.label} を一次受け`;
   const suggestedAction = toActionLabel(handlingMode, notificationMode);
-  const summary = `${category.summary} 問い合わせ要点: ${shortMessage(input.message, 56)}`;
-  const reply = composeReply(
-    category.code,
+  const summary = input.summary?.trim() || buildDefaultSummary(input.message, category.code);
+  const reply = resolveReply({
+    categoryCode: category.code,
     tone,
     matchedSourceTitles,
     handlingMode,
-  );
+    reply: input.reply,
+  });
 
   return {
     categoryCode: category.code,
@@ -439,7 +496,28 @@ export function evaluateInquiry(
     suggestedAction,
     matchedSourceIds,
     matchedSourceTitles,
+    responseSource: input.responseSource ?? "rules",
+    responseModel: input.responseModel,
   };
+}
+
+export function evaluateInquiry(
+  input: InquiryEngineInput,
+): InquiryEngineResult {
+  const { categoryCode, knowledgeMatches } = detectCategory(
+    input.message,
+    input.sellerType,
+    input.knowledgeSources,
+  );
+  const matchedSources = knowledgeMatches.slice(0, 3).map((item) => item.source);
+
+  return finalizeInquiryDecision({
+    ...input,
+    categoryCode,
+    matchedSourceIds: matchedSources.map((source) => source.id),
+    matchedSourceTitles: matchedSources.map((source) => source.title),
+    responseSource: "rules",
+  });
 }
 
 function notificationModeToUrgency(mode: NotificationMode) {

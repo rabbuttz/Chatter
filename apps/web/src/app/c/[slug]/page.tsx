@@ -6,6 +6,7 @@ import { SectionCard, StatusBadge } from "@ichijiuke/ui";
 import { submitPublicInquiryAction } from "@/app/actions/inquiry";
 import { getDemoSession, isDemoFallbackEnabled } from "@/lib/auth";
 import { getPublicDemoWorkspace } from "@/lib/demo-workspace";
+import { getInquiryResponseMode } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function PublicChatPage({
   const { slug } = await params;
   const session = await getDemoSession();
   const isDemoMode = isDemoFallbackEnabled();
+  const inquiryResponseMode = getInquiryResponseMode();
   const workspace = await getPublicDemoWorkspace(slug, session);
 
   if (!workspace) {
@@ -76,6 +78,9 @@ export default async function PublicChatPage({
             <StatusBadge tone={isOwnerPreview ? "warning" : "neutral"}>
               {isOwnerPreview ? "owner preview" : "public intake"}
             </StatusBadge>
+            <StatusBadge tone={inquiryResponseMode === "openai" ? "accent" : "neutral"}>
+              {inquiryResponseMode === "openai" ? "OpenAI grounded" : "rules fallback"}
+            </StatusBadge>
           </div>
 
           <p className="mt-6 text-sm leading-7 text-muted">
@@ -122,7 +127,9 @@ export default async function PublicChatPage({
           <p className="mt-4 text-sm leading-7 text-muted">
             {isDemoMode && !isOwnerPreview
               ? "`demo-shop` は静的なローカル確認用デモです。永続保存は seller の owner preview か本番モードで確認してください。"
-              : "公開問い合わせは分類結果と要約付きで inbox に保存されます。"}
+              : inquiryResponseMode === "openai"
+                ? "公開問い合わせは OpenAI と published knowledge を使って一次受けし、分類結果と要約付きで inbox に保存されます。"
+                : "公開問い合わせは rules fallback で一次受けし、分類結果と要約付きで inbox に保存されます。"}
           </p>
         </SectionCard>
 
@@ -155,6 +162,9 @@ export default async function PublicChatPage({
                       {category?.label ?? inquiry.categoryCode}
                     </StatusBadge>
                     <StatusBadge tone="neutral">{inquiry.handlingMode}</StatusBadge>
+                    <StatusBadge tone={inquiry.responseSource === "openai" ? "accent" : "neutral"}>
+                      {inquiry.responseSource === "openai" ? "openai" : "rules"}
+                    </StatusBadge>
                   </div>
                   {inquiry.matchedSourceTitles.length > 0 ? (
                     <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted">

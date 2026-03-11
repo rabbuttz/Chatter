@@ -42,6 +42,7 @@ export const inquiryStatusValues = [
 ] as const;
 export const autoReplyToneValues = ["neutral", "warm", "firm"] as const;
 export const alertModeValues = ["summary", "urgent"] as const;
+export const responseSourceValues = ["rules", "openai"] as const;
 
 export const sellerTypeSchema = z.enum(sellerTypeValues);
 export const handlingModeSchema = z.enum(handlingModeValues);
@@ -53,6 +54,7 @@ export const publicStatusSchema = z.enum(publicStatusValues);
 export const inquiryStatusSchema = z.enum(inquiryStatusValues);
 export const autoReplyToneSchema = z.enum(autoReplyToneValues);
 export const alertModeSchema = z.enum(alertModeValues);
+export const responseSourceSchema = z.enum(responseSourceValues);
 
 export type SellerType = z.infer<typeof sellerTypeSchema>;
 export type HandlingMode = z.infer<typeof handlingModeSchema>;
@@ -64,6 +66,7 @@ export type PublicStatus = z.infer<typeof publicStatusSchema>;
 export type InquiryStatus = z.infer<typeof inquiryStatusSchema>;
 export type AutoReplyTone = z.infer<typeof autoReplyToneSchema>;
 export type AlertMode = z.infer<typeof alertModeSchema>;
+export type ResponseSource = z.infer<typeof responseSourceSchema>;
 
 export const sellerTypeOptionSchema = z.object({
   value: sellerTypeSchema,
@@ -351,6 +354,8 @@ export const inquiryRecordSchema = z.object({
   summary: z.string().optional(),
   matchedSourceIds: z.array(z.string()).default([]),
   matchedSourceTitles: z.array(z.string()).default([]),
+  responseSource: responseSourceSchema.default("rules"),
+  responseModel: z.string().min(1).optional(),
   createdAt: z.string().min(1).optional(),
 });
 

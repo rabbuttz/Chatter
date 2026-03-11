@@ -1,14 +1,19 @@
 "use server";
 
+import { createSellerAccount, getSellerByEmail } from "@ichijiuke/db";
+import { sellerTypeValues } from "@ichijiuke/domain";
 import { redirect } from "next/navigation";
 
-import { sellerTypeValues } from "@ichijiuke/domain";
-
 import {
+  buildSessionFromCredentials,
   clearDemoSession,
+  hashPassword,
+  isDemoFallbackEnabled,
+  isProductionAuthEnabled,
   normalizeDisplayName,
   resolveRedirectPath,
   setDemoSession,
+  verifyPassword,
 } from "@/lib/auth";
 
 function getFormValue(formData: FormData, key: string) {
@@ -23,45 +28,125 @@ function resolveSellerType(value: string) {
     : "hybrid";
 }
 
+function requirePasswordForProduction(password: string, path: string) {
+  if (isProductionAuthEnabled() && password.length < 12) {
+    redirectTo(`${path}?error=weak_password`);
+  }
+}
+
+function redirectTo(path: string): never {
+  redirect(path as never);
+}
+
 export async function loginDemoAction(formData: FormData) {
-  const email = getFormValue(formData, "email");
+  const email = getFormValue(formData, "email").toLowerCase();
   const displayName = getFormValue(formData, "displayName");
+  const password = getFormValue(formData, "password");
   const nextPath = resolveRedirectPath(getFormValue(formData, "next"));
 
   if (!email) {
-    redirect(`/login?error=missing_email&next=${encodeURIComponent(nextPath)}`);
+    redirectTo(`/login?error=missing_email&next=${encodeURIComponent(nextPath)}`);
   }
 
-  await setDemoSession({
-    createdAt: new Date().toISOString(),
-    displayName: normalizeDisplayName(email, displayName),
-    email,
-    sellerType: "hybrid",
-  });
+  if (isDemoFallbackEnabled()) {
+    await setDemoSession(
+      buildSessionFromCredentials({
+        email,
+        displayName,
+        sellerType: "hybrid",
+      }),
+    );
 
-  redirect(nextPath as never);
+    redirectTo(nextPath);
+  }
+
+  if (!isProductionAuthEnabled()) {
+    redirectTo(`/login?error=auth_not_configured&next=${encodeURIComponent(nextPath)}`);
+  }
+
+  const seller = await getSellerByEmail(email);
+
+  if (!seller || !verifyPassword(password, seller.passwordHash)) {
+    redirectTo(`/login?error=invalid_credentials&next=${encodeURIComponent(nextPath)}`);
+  }
+
+  await setDemoSession(
+    buildSessionFromCredentials({
+      sellerId: seller.id,
+      email: seller.email,
+      displayName: seller.displayName,
+      sellerType: seller.sellerType,
+    }),
+  );
+
+  redirectTo(nextPath);
 }
 
 export async function signupDemoAction(formData: FormData) {
-  const email = getFormValue(formData, "email");
+  const email = getFormValue(formData, "email").toLowerCase();
   const displayName = getFormValue(formData, "displayName");
   const sellerType = resolveSellerType(getFormValue(formData, "sellerType"));
+  const password = getFormValue(formData, "password");
 
   if (!email) {
-    redirect("/signup?error=missing_email");
+    redirectTo("/signup?error=missing_email");
   }
 
-  await setDemoSession({
-    createdAt: new Date().toISOString(),
+  if (isDemoFallbackEnabled()) {
+    await setDemoSession(
+      buildSessionFromCredentials({
+        email,
+        displayName,
+        sellerType,
+      }),
+    );
+
+    redirectTo("/setup");
+  }
+
+  if (!isProductionAuthEnabled()) {
+    redirectTo("/signup?error=auth_not_configured");
+  }
+
+  requirePasswordForProduction(password, "/signup");
+
+  const existingSeller = await getSellerByEmail(email);
+
+  if (existingSeller) {
+    redirectTo("/signup?error=email_exists");
+  }
+
+  const sellerId =
+    email
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, "-")
+      .replaceAll(/^-+|-+$/g, "") || `seller-${Date.now()}`;
+
+  const createdSeller = await createSellerAccount({
+    id: sellerId,
     displayName: normalizeDisplayName(email, displayName),
     email,
+    passwordHash: hashPassword(password),
     sellerType,
+    publicSlug: sellerId,
+    publicStatus: "private_preview",
+    setupCompleted: false,
+    notificationEmail: email,
   });
 
-  redirect("/setup");
+  await setDemoSession(
+    buildSessionFromCredentials({
+      sellerId: createdSeller.id,
+      email: createdSeller.email,
+      displayName: createdSeller.displayName,
+      sellerType: createdSeller.sellerType,
+    }),
+  );
+
+  redirectTo("/setup");
 }
 
 export async function logoutDemoAction() {
   await clearDemoSession();
-  redirect("/");
+  redirectTo("/");
 }

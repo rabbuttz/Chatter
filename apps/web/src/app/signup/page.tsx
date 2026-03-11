@@ -4,7 +4,7 @@ import { sellerTypes } from "@ichijiuke/domain";
 import { SectionCard, StatusBadge } from "@ichijiuke/ui";
 
 import { signupDemoAction } from "@/app/actions/auth";
-import { getDemoSession } from "@/lib/auth";
+import { getDemoSession, isProductionAuthEnabled } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,7 @@ type SignupPageProps = {
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
   const session = await getDemoSession();
+  const isProductionAuth = isProductionAuthEnabled();
   const resolvedSearchParams = await searchParams;
 
   if (session) {
@@ -27,11 +28,15 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
       <SectionCard
         eyebrow="Entry"
         title="販売者登録の入口"
-        description="signup 完了時点で demo session を発行し、そのまま setup へ流します。"
+        description={
+          isProductionAuth
+            ? "アカウントを作成すると DB に販売者レコードと初期 workspace を作り、そのまま setup へ流します。"
+            : "env 未設定時は demo seller を即時発行して setup を確認できます。"
+        }
       >
         <div className="flex flex-wrap gap-2">
-          <StatusBadge tone="accent">demo signup</StatusBadge>
-          <StatusBadge tone="neutral">cookie session</StatusBadge>
+          <StatusBadge tone="accent">{isProductionAuth ? "production signup" : "demo signup"}</StatusBadge>
+          <StatusBadge tone="neutral">{isProductionAuth ? "db + session cookie" : "cookie session"}</StatusBadge>
           {resolvedSearchParams.error ? <StatusBadge label={resolvedSearchParams.error} tone="warning" /> : null}
         </div>
         <div className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -51,7 +56,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                 Display name
                 <input
                   className="rounded-[20px] border border-line bg-surface-strong px-4 py-3 font-normal"
-                  defaultValue="Demo Seller"
+                  defaultValue={isProductionAuth ? "" : "Demo Seller"}
                   name="displayName"
                   placeholder="Demo Seller"
                   type="text"
@@ -61,10 +66,19 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                 Email
                 <input
                   className="rounded-[20px] border border-line bg-surface-strong px-4 py-3 font-normal"
-                  defaultValue="seller@example.com"
+                  defaultValue={isProductionAuth ? "" : "seller@example.com"}
                   name="email"
                   placeholder="seller@example.com"
                   type="email"
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-semibold">
+                Password
+                <input
+                  className="rounded-[20px] border border-line bg-surface-strong px-4 py-3 font-normal"
+                  name="password"
+                  placeholder={isProductionAuth ? "12 文字以上" : "demo mode では未使用"}
+                  type="password"
                 />
               </label>
               <label className="grid gap-2 text-sm font-semibold">

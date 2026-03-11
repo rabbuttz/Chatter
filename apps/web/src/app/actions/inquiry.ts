@@ -1,11 +1,15 @@
 "use server";
 
+import { evaluateInquiry } from "@ichijiuke/inquiry-engine";
 import { revalidatePath } from "next/cache";
 
-import { evaluateInquiry } from "@ichijiuke/inquiry-engine";
-
 import { getDemoSession } from "@/lib/auth";
-import { getDemoWorkspace, updateDemoWorkspace } from "@/lib/demo-workspace";
+import {
+  getPublicDemoWorkspace,
+  persistDemoWorkspace,
+  saveDemoWorkspace,
+} from "@/lib/demo-workspace";
+import { isProductionPersistenceEnabled } from "@/lib/env";
 
 function getValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -18,13 +22,13 @@ export async function submitPublicInquiryAction(formData: FormData) {
   const slug = getValue(formData, "slug");
   const message = getValue(formData, "message");
 
-  if (!session || !slug || !message) {
+  if (!slug || !message) {
     return;
   }
 
-  const workspace = await getDemoWorkspace(session);
+  const workspace = await getPublicDemoWorkspace(slug, session);
 
-  if (workspace.settings.publicSlug !== slug) {
+  if (!workspace) {
     return;
   }
 
@@ -37,14 +41,14 @@ export async function submitPublicInquiryAction(formData: FormData) {
   });
   const inquiryId = `inq-${Date.now()}`;
   const createdAt = new Date().toISOString();
-
-  await updateDemoWorkspace(session, (current) => ({
-    ...current,
+  const nextWorkspace = {
+    ...workspace,
+    updatedAt: createdAt,
     inquiries: [
       {
         id: inquiryId,
-        sellerId: current.settings.sellerId,
-        publicSlug: current.settings.publicSlug,
+        sellerId: workspace.settings.sellerId,
+        publicSlug: workspace.settings.publicSlug,
         status: result.inquiryStatus,
         categoryCode: result.categoryCode,
         handlingMode: result.handlingMode,
@@ -56,15 +60,15 @@ export async function submitPublicInquiryAction(formData: FormData) {
         matchedSourceTitles: result.matchedSourceTitles,
         createdAt,
       },
-      ...current.inquiries,
+      ...workspace.inquiries,
     ].slice(0, 30),
     notifications:
       result.notificationMode === "none"
-        ? current.notifications
+        ? workspace.notifications
         : [
             {
               id: `ntf-${Date.now()}`,
-              sellerId: current.settings.sellerId,
+              sellerId: workspace.settings.sellerId,
               inquiryId,
               categoryCode: result.categoryCode,
               urgency:
@@ -78,9 +82,17 @@ export async function submitPublicInquiryAction(formData: FormData) {
               referenceTitles: result.matchedSourceTitles,
               createdAt,
             },
-            ...current.notifications,
+            ...workspace.notifications,
           ].slice(0, 15),
-  }));
+  };
+
+  if (session?.sellerId === workspace.settings.sellerId) {
+    await saveDemoWorkspace(session, nextWorkspace);
+  } else if (isProductionPersistenceEnabled()) {
+    await persistDemoWorkspace(nextWorkspace);
+  } else {
+    return;
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/inbox");

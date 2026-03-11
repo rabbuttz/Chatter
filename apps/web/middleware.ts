@@ -1,17 +1,44 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-const DEMO_SESSION_COOKIE = "ichijiuke_demo_session";
+import {
+  isDemoFallbackEnabled,
+  isProductionPersistenceEnabled,
+} from "@/lib/env";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
+
 const authRoutes = new Set(["/login", "/signup"]);
 const protectedPrefixes = ["/dashboard", "/setup", "/settings", "/inbox"];
 
 function isProtectedPath(pathname: string) {
-  return protectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return protectedPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
-export function middleware(request: NextRequest) {
+async function resolveHasSession(request: NextRequest) {
+  const rawToken = request.cookies.get(SESSION_COOKIE)?.value;
+
+  if (!rawToken) {
+    return false;
+  }
+
+  if (isDemoFallbackEnabled()) {
+    return true;
+  }
+
+  if (!isProductionPersistenceEnabled()) {
+    return false;
+  }
+
+  const payload = await verifySessionToken(rawToken);
+
+  return Boolean(payload);
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const hasSession = Boolean(request.cookies.get(DEMO_SESSION_COOKIE)?.value);
+  const hasSession = await resolveHasSession(request);
 
   if (isProtectedPath(pathname) && !hasSession) {
     const loginUrl = new URL("/login", request.url);
@@ -29,5 +56,12 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/setup/:path*", "/settings/:path*", "/inbox/:path*", "/login", "/signup"],
+  matcher: [
+    "/dashboard/:path*",
+    "/setup/:path*",
+    "/settings/:path*",
+    "/inbox/:path*",
+    "/login",
+    "/signup",
+  ],
 };

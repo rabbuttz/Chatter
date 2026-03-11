@@ -1,22 +1,36 @@
-import { cookies } from "next/headers";
-import { z } from "zod";
-
+import {
+  ensureDatabaseSchema,
+  getSellerByEmail,
+  getSellerById,
+  getSellerByPublicSlug,
+  getSellerWorkspace,
+  saveSellerProfile,
+  saveSellerWorkspace,
+  type SellerAccount,
+  type SellerWorkspaceRecord,
+} from "@ichijiuke/db";
 import {
   createDefaultSellerPolicies,
+  inquiryRecordSchema,
   knowledgeSourceSchema,
   knowledgeSourceTypeValues,
   notificationSummarySchema,
   publicChatStarterButtons,
   shopSettingsSchema,
   type KnowledgeSource,
+  type NotificationSummary,
   type SellerPolicy,
   type ShopSettings,
-  type NotificationSummary,
-  inquiryRecordSchema,
   type InquiryRecord,
 } from "@ichijiuke/domain";
+import { cookies } from "next/headers";
+import { z } from "zod";
 
 import type { DemoSession } from "@/lib/auth";
+import {
+  isDemoFallbackEnabled,
+  isProductionPersistenceEnabled,
+} from "@/lib/env";
 
 const DEMO_WORKSPACE_COOKIE = "ichijiuke_demo_workspace";
 
@@ -50,12 +64,14 @@ function nowIso() {
 }
 
 function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 32) || "demo-shop";
+  return (
+    value
+      .toLowerCase()
+      .trim()
+      .replaceAll(/[^a-z0-9]+/g, "-")
+      .replaceAll(/^-+|-+$/g, "")
+      .slice(0, 32) || "demo-shop"
+  );
 }
 
 function unique<T>(values: T[]) {
@@ -63,7 +79,7 @@ function unique<T>(values: T[]) {
 }
 
 function sellerIdFromSession(session: DemoSession) {
-  return slugify(session.email.replace("@", "-"));
+  return session.sellerId || slugify(session.email.replace("@", "-"));
 }
 
 function starterButtonsFromPolicies(policies: SellerPolicy[]) {
@@ -89,7 +105,10 @@ function buildKnowledgeSources(
         sellerType === "digital"
           ? "購入後すぐにダウンロード案内を表示します。Booth / BASE の案内に沿って再取得できます。"
           : "通常は3営業日以内に発送します。発送完了後に追跡番号を共有します。",
-      tags: sellerType === "digital" ? ["ダウンロード", "購入後", "再取得"] : ["発送", "配送", "営業日"],
+      tags:
+        sellerType === "digital"
+          ? ["ダウンロード", "購入後", "再取得"]
+          : ["発送", "配送", "営業日"],
       sellerTypes: [sellerType],
       sortOrder: 0,
     },
@@ -98,7 +117,10 @@ function buildKnowledgeSources(
       sellerId,
       type: "policy",
       status: "published",
-      title: sellerType === "digital" ? "利用規約と返金ポリシー" : "返品・キャンセル規約",
+      title:
+        sellerType === "digital"
+          ? "利用規約と返金ポリシー"
+          : "返品・キャンセル規約",
       body:
         sellerType === "digital"
           ? "デジタル商品の再配布は禁止です。返金可否と商用利用範囲は商品ページの規約に従います。"
@@ -177,21 +199,6 @@ function buildSeedInquiries(
       matchedSourceTitles: ["発送目安"],
       createdAt: nowIso(),
     },
-    {
-      id: `${sellerId}-inq-03`,
-      sellerId,
-      publicSlug,
-      status: "urgent_review",
-      categoryCode: "C13",
-      handlingMode: "urgent_handoff",
-      notificationMode: "urgent",
-      rawMessage: "決済が二重に見えるので確認してほしいです。",
-      responsePreview: "高リスクとして優先共有します。",
-      summary: "決済関連。優先確認が必要。",
-      matchedSourceIds: [`${sellerId}-policy-main`],
-      matchedSourceTitles: ["利用規約と返金ポリシー"],
-      createdAt: nowIso(),
-    },
   ];
 }
 
@@ -206,7 +213,10 @@ function buildSeedNotifications(
       sellerId,
       inquiryId: inquiry.id,
       categoryCode: inquiry.categoryCode,
-      urgency: inquiry.notificationMode === "urgent" ? "urgent" : "summary",
+      urgency:
+        inquiry.notificationMode === "urgent"
+          ? ("urgent" as const)
+          : ("summary" as const),
       headline:
         inquiry.notificationMode === "urgent"
           ? "即時確認が必要な問い合わせ"
@@ -222,6 +232,30 @@ function buildSeedNotifications(
     }));
 }
 
+function normalizeWorkspace(workspace: DemoWorkspace) {
+  const policies =
+    workspace.settings.policies.length > 0
+      ? workspace.settings.policies
+      : createDefaultSellerPolicies(workspace.settings.sellerType);
+  const starterButtons =
+    workspace.settings.starterButtons.length > 0
+      ? unique(workspace.settings.starterButtons)
+      : starterButtonsFromPolicies(policies);
+
+  return demoWorkspaceSchema.parse({
+    ...workspace,
+    settings: {
+      ...workspace.settings,
+      notificationEmail: workspace.settings.notificationEmail?.trim() || undefined,
+      policies,
+      starterButtons:
+        starterButtons.length > 0
+          ? starterButtons
+          : publicChatStarterButtons.slice(0, 5),
+    },
+  });
+}
+
 function buildWorkspace(
   session: DemoSession,
   options?: {
@@ -233,7 +267,7 @@ function buildWorkspace(
   const sellerId = sellerIdFromSession(session);
   const publicSlug = options?.slug ?? slugify(session.displayName || session.email);
   const policies = createDefaultSellerPolicies(session.sellerType);
-  const createdAt = nowIso();
+  const createdAt = session.createdAt || nowIso();
   const settings: ShopSettings = {
     sellerId,
     shopName: `${session.displayName} shop`,
@@ -270,6 +304,7 @@ function buildWorkspace(
 function buildPublishedDemoWorkspace() {
   return buildWorkspace(
     {
+      sellerId: "seller_demo-shop",
       createdAt: nowIso(),
       displayName: "Demo Shop",
       email: "demo-shop@example.com",
@@ -283,34 +318,169 @@ function buildPublishedDemoWorkspace() {
   );
 }
 
-function reconcileWorkspace(
-  session: DemoSession,
-  workspace: DemoWorkspace,
-) {
-  const sellerId = sellerIdFromSession(session);
-  const nextPolicies =
-    workspace.settings.policies.length > 0
-      ? workspace.settings.policies
-      : createDefaultSellerPolicies(workspace.settings.sellerType);
+function reconcileWorkspace(session: DemoSession, workspace: DemoWorkspace) {
+  const normalized = normalizeWorkspace(workspace);
 
   return demoWorkspaceSchema.parse({
-    ...workspace,
+    ...normalized,
     settings: {
-      ...workspace.settings,
-      sellerId,
-      notificationEmail: workspace.settings.notificationEmail || session.email,
-      policies: nextPolicies,
-      starterButtons:
-        workspace.settings.starterButtons.length > 0
-          ? workspace.settings.starterButtons
-          : starterButtonsFromPolicies(nextPolicies),
+      ...normalized.settings,
+      sellerId: sellerIdFromSession(session),
+      sellerType: session.sellerType,
+      notificationEmail:
+        normalized.settings.notificationEmail || session.email,
     },
   });
+}
+
+function buildSessionFromSeller(seller: SellerAccount): DemoSession {
+  return {
+    sellerId: seller.id,
+    createdAt: seller.createdAt,
+    displayName: seller.displayName,
+    email: seller.email,
+    sellerType: seller.sellerType,
+  };
+}
+
+function hydrateWorkspaceRecord(
+  record: SellerWorkspaceRecord,
+  seller: SellerAccount,
+) {
+  try {
+    const parsed = demoWorkspaceSchema.parse(record.workspaceJson);
+
+    return demoWorkspaceSchema.parse({
+      ...parsed,
+      createdAt: parsed.createdAt || record.createdAt,
+      updatedAt: record.updatedAt,
+      settings: {
+        ...parsed.settings,
+        sellerId: seller.id,
+        sellerType: seller.sellerType,
+        publicSlug: seller.publicSlug,
+        publicStatus: seller.publicStatus,
+        notificationEmail:
+          parsed.settings.notificationEmail ||
+          seller.notificationEmail ||
+          seller.email,
+        setupCompleted: seller.setupCompleted,
+      },
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function persistWorkspaceToDatabase(workspace: DemoWorkspace) {
+  const normalized = normalizeWorkspace({
+    ...workspace,
+    updatedAt: nowIso(),
+  });
+  const seller = await getSellerById(normalized.settings.sellerId);
+
+  if (!seller) {
+    throw new Error("Seller not found for workspace persistence.");
+  }
+
+  const savedSeller = await saveSellerProfile({
+    id: seller.id,
+    displayName: seller.displayName,
+    email: seller.email,
+    sellerType: normalized.settings.sellerType,
+    publicSlug: normalized.settings.publicSlug,
+    publicStatus: normalized.settings.publicStatus,
+    setupCompleted: normalized.settings.setupCompleted,
+    notificationEmail:
+      normalized.settings.notificationEmail || seller.notificationEmail || seller.email,
+  });
+
+  if (!savedSeller) {
+    throw new Error("Failed to update seller profile.");
+  }
+
+  await saveSellerWorkspace(
+    savedSeller.id,
+    normalized as unknown as Record<string, unknown>,
+  );
+
+  return normalizeWorkspace({
+    ...normalized,
+    settings: {
+      ...normalized.settings,
+      publicSlug: savedSeller.publicSlug,
+      publicStatus: savedSeller.publicStatus,
+      notificationEmail: savedSeller.notificationEmail || savedSeller.email,
+      setupCompleted: savedSeller.setupCompleted,
+    },
+  });
+}
+
+async function getDatabaseWorkspaceBySellerId(
+  sellerId: string,
+  fallbackSession?: DemoSession,
+) {
+  const seller = await getSellerById(sellerId);
+
+  if (!seller) {
+    return fallbackSession ? buildWorkspace(fallbackSession) : null;
+  }
+
+  const record = await getSellerWorkspace(seller.id);
+  const hydrated = record ? hydrateWorkspaceRecord(record, seller) : null;
+
+  if (hydrated) {
+    return hydrated;
+  }
+
+  const seeded = buildWorkspace(
+    fallbackSession ?? buildSessionFromSeller(seller),
+    {
+      slug: seller.publicSlug,
+      status: seller.publicStatus,
+      setupCompleted: seller.setupCompleted,
+    },
+  );
+
+  await persistWorkspaceToDatabase(seeded);
+
+  return seeded;
 }
 
 export async function getDemoWorkspace(
   session: DemoSession,
 ): Promise<DemoWorkspace> {
+  if (isProductionPersistenceEnabled()) {
+    await ensureDatabaseSchema();
+    const workspace = await getDatabaseWorkspaceBySellerId(
+      session.sellerId,
+      session,
+    );
+
+    if (workspace) {
+      return workspace;
+    }
+
+    const seller = await getSellerByEmail(session.email);
+
+    if (seller) {
+      return (
+        (await getDatabaseWorkspaceBySellerId(seller.id, session)) ??
+        buildWorkspace(session)
+      );
+    }
+
+    const seededWorkspace = buildWorkspace(session);
+
+    await persistDemoWorkspace(seededWorkspace);
+
+    return seededWorkspace;
+  }
+
+  if (!isDemoFallbackEnabled()) {
+    return buildWorkspace(session);
+  }
+
   const cookieStore = await cookies();
   const rawValue = cookieStore.get(DEMO_WORKSPACE_COOKIE)?.value;
   const stored = rawValue ? decodeWorkspace(rawValue) : null;
@@ -326,6 +496,24 @@ export async function getPublicDemoWorkspace(
   slug: string,
   session?: DemoSession | null,
 ): Promise<DemoWorkspace | null> {
+  if (isProductionPersistenceEnabled()) {
+    if (session) {
+      const ownWorkspace = await getDemoWorkspace(session);
+
+      if (ownWorkspace.settings.publicSlug === slug) {
+        return ownWorkspace;
+      }
+    }
+
+    const seller = await getSellerByPublicSlug(slug);
+
+    if (!seller || seller.publicStatus !== "published") {
+      return null;
+    }
+
+    return getDatabaseWorkspaceBySellerId(seller.id);
+  }
+
   if (session) {
     const workspace = await getDemoWorkspace(session);
 
@@ -345,11 +533,22 @@ export async function saveDemoWorkspace(
   session: DemoSession,
   workspace: DemoWorkspace,
 ) {
-  const cookieStore = await cookies();
   const normalized = reconcileWorkspace(session, {
     ...workspace,
     updatedAt: nowIso(),
   });
+
+  if (isProductionPersistenceEnabled()) {
+    await persistWorkspaceToDatabase(normalized);
+
+    return;
+  }
+
+  if (!isDemoFallbackEnabled()) {
+    return;
+  }
+
+  const cookieStore = await cookies();
 
   cookieStore.set(DEMO_WORKSPACE_COOKIE, encodeWorkspace(normalized), {
     httpOnly: true,
@@ -367,12 +566,22 @@ export async function updateDemoWorkspace(
   const workspace = await getDemoWorkspace(session);
   const nextWorkspace = updater(workspace);
 
-  await saveDemoWorkspace(session, {
-    ...nextWorkspace,
+  await saveDemoWorkspace(session, nextWorkspace);
+
+  return getDemoWorkspace(session);
+}
+
+export async function persistDemoWorkspace(workspace: DemoWorkspace) {
+  const normalized = normalizeWorkspace({
+    ...workspace,
     updatedAt: nowIso(),
   });
 
-  return getDemoWorkspace(session);
+  if (isProductionPersistenceEnabled()) {
+    return persistWorkspaceToDatabase(normalized);
+  }
+
+  return normalized;
 }
 
 export function getWorkspaceMetrics(workspace: DemoWorkspace) {
@@ -391,8 +600,10 @@ export function getWorkspaceMetrics(workspace: DemoWorkspace) {
     workspace.settings.shopName.trim().length > 0,
     workspace.settings.scopeMessage.trim().length > 0,
     workspace.settings.publicIntroMessage.trim().length > 0,
-    workspace.knowledgeSources.filter((source) => source.status === "published").length >= 3,
-    workspace.settings.publicStatus !== "draft" || workspace.settings.setupCompleted,
+    workspace.knowledgeSources.filter((source) => source.status === "published")
+      .length >= 3,
+    workspace.settings.publicStatus !== "draft" ||
+      workspace.settings.setupCompleted,
   ].filter(Boolean).length;
 
   return {

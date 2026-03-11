@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { SectionCard, StatusBadge } from "@ichijiuke/ui";
 
 import { loginDemoAction } from "@/app/actions/auth";
-import { getDemoSession } from "@/lib/auth";
+import { getDemoSession, isProductionAuthEnabled } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,7 @@ type LoginPageProps = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const session = await getDemoSession();
+  const isProductionAuth = isProductionAuthEnabled();
   const resolvedSearchParams = await searchParams;
   const nextPath = resolvedSearchParams.next ?? "/dashboard";
 
@@ -30,10 +31,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <SectionCard
           eyebrow="Auth"
           title="販売者ログイン"
-          description="MVP scaffold として動く demo session を cookie に保存します。本番 auth は後続で差し替えます。"
+          description={
+            isProductionAuth
+              ? "メールアドレスとパスワードでログインし、署名付き session cookie で管理画面へ入ります。"
+              : "env 未設定時は demo session を cookie に保存してローカル確認できます。"
+          }
         >
           <div className="flex flex-wrap gap-2">
-            <StatusBadge label="cookie session" tone="accent" />
+            <StatusBadge label={isProductionAuth ? "signed session" : "demo session"} tone="accent" />
             <StatusBadge label="route redirect" tone="neutral" />
             {resolvedSearchParams.error ? <StatusBadge label={resolvedSearchParams.error} tone="warning" /> : null}
           </div>
@@ -43,22 +48,34 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               Email
               <input
                 className="rounded-[20px] border border-line bg-surface-strong px-4 py-3 font-normal"
-                defaultValue="seller@example.com"
+                defaultValue={isProductionAuth ? "" : "seller@example.com"}
                 name="email"
                 placeholder="seller@example.com"
                 type="email"
               />
             </label>
-            <label className="grid gap-2 text-sm font-semibold">
-              Display name
-              <input
-                className="rounded-[20px] border border-line bg-surface-strong px-4 py-3 font-normal"
-                defaultValue="Demo Seller"
-                name="displayName"
-                placeholder="Demo Seller"
-                type="text"
-              />
-            </label>
+            {isProductionAuth ? (
+              <label className="grid gap-2 text-sm font-semibold">
+                Password
+                <input
+                  className="rounded-[20px] border border-line bg-surface-strong px-4 py-3 font-normal"
+                  name="password"
+                  placeholder="12 文字以上のパスワード"
+                  type="password"
+                />
+              </label>
+            ) : (
+              <label className="grid gap-2 text-sm font-semibold">
+                Display name
+                <input
+                  className="rounded-[20px] border border-line bg-surface-strong px-4 py-3 font-normal"
+                  defaultValue="Demo Seller"
+                  name="displayName"
+                  placeholder="Demo Seller"
+                  type="text"
+                />
+              </label>
+            )}
             <button
               className="inline-flex justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white"
               type="submit"
@@ -70,13 +87,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
         <SectionCard
           eyebrow="Next"
-          title="この最小実装で十分なこと"
-          description="admin route の保護と demo session の可視化が通れば、Auth.js 導入前でも開発は進められます。"
+          title="本番化の前提"
+          description="admin route の保護、public slug ごとの保存、session cookie の検証まで入れば本番用の基礎になります。"
         >
           <ul className="space-y-3 text-sm leading-7 text-muted">
             <li>未ログインで `/dashboard` に入ると `/login` へリダイレクト</li>
-            <li>login 成功後は cookie session を発行</li>
-            <li>signup からも同じ cookie session を作成</li>
+            <li>production mode では DB 登録済みアカウントのみログイン可能</li>
+            <li>env 未設定時は demo fallback で UI 確認を継続可能</li>
           </ul>
           <Link className="mt-6 inline-flex text-sm font-semibold text-accent" href="/signup">
             新規登録へ

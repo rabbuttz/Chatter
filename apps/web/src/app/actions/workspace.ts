@@ -1,7 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
+import { isPublicSlugAvailable, isReservedPublicSlug } from "@ichijiuke/db";
 import {
   autoReplyToneValues,
   createDefaultSellerPolicies,
@@ -12,9 +11,14 @@ import {
   publicStatusValues,
   sellerTypeValues,
 } from "@ichijiuke/domain";
+import { revalidatePath } from "next/cache";
 
 import { getDemoSession } from "@/lib/auth";
 import { getDemoWorkspace, updateDemoWorkspace } from "@/lib/demo-workspace";
+import { isProductionPersistenceEnabled } from "@/lib/env";
+
+const MAX_SLUG_LENGTH = 32;
+const DEMO_PUBLIC_SLUG = "demo-shop";
 
 function getValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -28,7 +32,63 @@ function sanitizeSlug(value: string) {
     .trim()
     .replaceAll(/[^a-z0-9]+/g, "-")
     .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 32) || "demo-shop";
+    .slice(0, MAX_SLUG_LENGTH);
+}
+
+function buildSlugCandidate(base: string, suffix?: string) {
+  const normalizedBase = sanitizeSlug(base) || "seller";
+
+  if (!suffix) {
+    return normalizedBase;
+  }
+
+  const normalizedSuffix = sanitizeSlug(suffix).slice(0, 12);
+  const baseLimit = MAX_SLUG_LENGTH - normalizedSuffix.length - 1;
+
+  return `${normalizedBase.slice(0, Math.max(baseLimit, 1))}-${normalizedSuffix}`;
+}
+
+async function resolvePublicSlug(input: {
+  desiredSlug: string;
+  currentSlug: string;
+  sellerId: string;
+}) {
+  const primarySlug = buildSlugCandidate(
+    input.desiredSlug || input.currentSlug || input.sellerId,
+  );
+
+  if (!isProductionPersistenceEnabled()) {
+    return primarySlug || DEMO_PUBLIC_SLUG;
+  }
+
+  if (
+    primarySlug !== DEMO_PUBLIC_SLUG &&
+    !isReservedPublicSlug(primarySlug) &&
+    (await isPublicSlugAvailable(primarySlug, input.sellerId))
+  ) {
+    return primarySlug;
+  }
+
+  const fallbackBase =
+    primarySlug === DEMO_PUBLIC_SLUG || isReservedPublicSlug(primarySlug)
+      ? input.sellerId
+      : primarySlug;
+
+  for (let index = 0; index < 50; index += 1) {
+    const suffix =
+      index === 0 ? input.sellerId.slice(0, 6) : `${input.sellerId.slice(0, 4)}${index}`;
+    const candidate = buildSlugCandidate(fallbackBase, suffix);
+
+    if (
+      candidate !== DEMO_PUBLIC_SLUG &&
+      !isReservedPublicSlug(candidate) &&
+      (await isPublicSlugAvailable(candidate, input.sellerId))
+    ) {
+      return candidate;
+    }
+  }
+
+  throw new Error("Public slug could not be assigned.");
 }
 
 function unique<T>(values: T[]) {
@@ -49,13 +109,13 @@ async function requireSession() {
   const session = await getDemoSession();
 
   if (!session) {
-    throw new Error("Demo session is required.");
+    throw new Error("Signed-in seller session is required.");
   }
 
   return session;
 }
 
-function revalidateWorkspacePaths(slug: string) {
+function revalidateWorkspacePaths(...slugs: string[]) {
   revalidatePath("/dashboard");
   revalidatePath("/setup");
   revalidatePath("/settings/intake");
@@ -63,12 +123,16 @@ function revalidateWorkspacePaths(slug: string) {
   revalidatePath("/settings/notifications");
   revalidatePath("/settings/publish");
   revalidatePath("/inbox");
-  revalidatePath(`/c/${slug}`);
   revalidatePath("/");
+
+  for (const slug of unique(slugs.filter(Boolean))) {
+    revalidatePath(`/c/${slug}`);
+  }
 }
 
 export async function saveSetupAction(formData: FormData) {
   const session = await requireSession();
+  const currentWorkspace = await getDemoWorkspace(session);
   const nextSellerType = sellerTypeValues.includes(
     getValue(formData, "sellerType") as (typeof sellerTypeValues)[number],
   )
@@ -80,6 +144,11 @@ export async function saveSetupAction(formData: FormData) {
     ? (getValue(formData, "autoReplyTone") as (typeof autoReplyToneValues)[number])
     : "warm";
   const resetPolicies = formData.get("resetPolicies") === "on";
+  const publicSlug = await resolvePublicSlug({
+    desiredSlug: getValue(formData, "publicSlug"),
+    currentSlug: currentWorkspace.settings.publicSlug,
+    sellerId: currentWorkspace.settings.sellerId,
+  });
 
   const workspace = await updateDemoWorkspace(session, (current) => {
     const templatePolicies = createDefaultSellerPolicies(nextSellerType);
@@ -103,9 +172,6 @@ export async function saveSetupAction(formData: FormData) {
               : templatePolicy;
           })
         : current.settings.policies;
-    const publicSlug = sanitizeSlug(
-      getValue(formData, "publicSlug") || current.settings.publicSlug,
-    );
 
     return {
       ...current,
@@ -127,7 +193,7 @@ export async function saveSetupAction(formData: FormData) {
     };
   });
 
-  revalidateWorkspacePaths(workspace.settings.publicSlug);
+  revalidateWorkspacePaths(currentWorkspace.settings.publicSlug, workspace.settings.publicSlug);
 }
 
 export async function saveIntakePoliciesAction(formData: FormData) {
@@ -242,16 +308,22 @@ export async function saveNotificationSettingsAction(formData: FormData) {
 
 export async function savePublishSettingsAction(formData: FormData) {
   const session = await requireSession();
+  const currentWorkspace = await getDemoWorkspace(session);
   const nextStatus = getValue(formData, "publicStatus");
   const manualButtons = getValue(formData, "starterButtons")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  const publicSlug = await resolvePublicSlug({
+    desiredSlug: getValue(formData, "publicSlug"),
+    currentSlug: currentWorkspace.settings.publicSlug,
+    sellerId: currentWorkspace.settings.sellerId,
+  });
   const workspace = await updateDemoWorkspace(session, (current) => ({
     ...current,
     settings: {
       ...current.settings,
-      publicSlug: sanitizeSlug(getValue(formData, "publicSlug") || current.settings.publicSlug),
+      publicSlug,
       publicStatus: publicStatusValues.includes(
         nextStatus as (typeof publicStatusValues)[number],
       )
@@ -268,5 +340,5 @@ export async function savePublishSettingsAction(formData: FormData) {
     },
   }));
 
-  revalidateWorkspacePaths(workspace.settings.publicSlug);
+  revalidateWorkspacePaths(currentWorkspace.settings.publicSlug, workspace.settings.publicSlug);
 }

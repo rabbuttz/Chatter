@@ -10,6 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.6"
+    "@ichijiuke/domain": "file:../domain",
+    "drizzle-orm": "^0.44.6",
+    "postgres": "^3.4.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20"
   }
 }

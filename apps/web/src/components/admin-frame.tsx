@@ -30,7 +30,7 @@ export function AdminFrame({
     <AppShell
       eyebrow={eyebrow}
       title={title}
-      description={`${description} Demo session: ${session.displayName} / ${session.email}`}
+      description={`${description} Signed in as ${session.displayName} / ${session.email}`}
       nav={adminRoutes}
       currentPath={pathname}
     >

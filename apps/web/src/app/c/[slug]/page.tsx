@@ -4,7 +4,7 @@ import { intakeCategoryByCode } from "@ichijiuke/domain";
 import { SectionCard, StatusBadge } from "@ichijiuke/ui";
 
 import { submitPublicInquiryAction } from "@/app/actions/inquiry";
-import { getDemoSession } from "@/lib/auth";
+import { getDemoSession, isDemoFallbackEnabled } from "@/lib/auth";
 import { getPublicDemoWorkspace } from "@/lib/demo-workspace";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ export default async function PublicChatPage({
 }) {
   const { slug } = await params;
   const session = await getDemoSession();
+  const isDemoMode = isDemoFallbackEnabled();
   const workspace = await getPublicDemoWorkspace(slug, session);
 
   if (!workspace) {
@@ -27,14 +28,24 @@ export default async function PublicChatPage({
         <SectionCard
           eyebrow="Public Chat"
           title="not found"
-          description="この公開 URL は見つかりませんでした。seller 側で slug を確認するか、preview 用の demo-shop を使ってください。"
+          description={
+            isDemoMode
+              ? "この公開 URL は見つかりませんでした。seller 側で slug を確認するか、ローカル確認用の demo-shop を使ってください。"
+              : "この公開 URL は見つかりませんでした。seller 側で slug を確認して再公開してください。"
+          }
         >
           <div className="flex flex-wrap gap-3">
-            <Link className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white" href="/login">
+            <Link
+              className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white"
+              href="/login"
+            >
               admin login
             </Link>
-            <Link className="rounded-full border border-line px-5 py-3 text-sm font-semibold" href="/c/demo-shop">
-              open demo-shop
+            <Link
+              className="rounded-full border border-line px-5 py-3 text-sm font-semibold"
+              href={isDemoMode ? "/c/demo-shop" : "/signup"}
+            >
+              {isDemoMode ? "open demo-shop" : "create seller"}
             </Link>
           </div>
         </SectionCard>
@@ -42,7 +53,9 @@ export default async function PublicChatPage({
     );
   }
 
-  const isOwnerPreview = session?.email === workspace.settings.notificationEmail && slug === workspace.settings.publicSlug;
+  const isOwnerPreview =
+    session?.sellerId === workspace.settings.sellerId &&
+    slug === workspace.settings.publicSlug;
   const recentInquiries = workspace.inquiries.slice(0, 8);
 
   return (
@@ -54,16 +67,20 @@ export default async function PublicChatPage({
           description="購入者向けの一次受け窓口です。FAQ と規約をもとに整理し、必要な内容だけ販売者へ引き継ぎます。"
         >
           <div className="flex flex-wrap gap-2">
-            <StatusBadge tone={workspace.settings.publicStatus === "published" ? "accent" : "neutral"}>
+            <StatusBadge
+              tone={workspace.settings.publicStatus === "published" ? "accent" : "neutral"}
+            >
               {workspace.settings.publicStatus}
             </StatusBadge>
             <StatusBadge tone="accent">{workspace.settings.shopName}</StatusBadge>
             <StatusBadge tone={isOwnerPreview ? "warning" : "neutral"}>
-              {isOwnerPreview ? "owner preview" : "demo preview"}
+              {isOwnerPreview ? "owner preview" : "public intake"}
             </StatusBadge>
           </div>
 
-          <p className="mt-6 text-sm leading-7 text-muted">{workspace.settings.publicIntroMessage}</p>
+          <p className="mt-6 text-sm leading-7 text-muted">
+            {workspace.settings.publicIntroMessage}
+          </p>
 
           <div className="mt-6 rounded-[1.6rem] border border-line bg-surface-strong px-4 py-4 text-sm leading-7 text-muted">
             {workspace.settings.scopeMessage}
@@ -74,7 +91,10 @@ export default async function PublicChatPage({
               <form key={label} action={submitPublicInquiryAction}>
                 <input name="slug" type="hidden" value={slug} />
                 <input name="message" type="hidden" value={label} />
-                <button className="rounded-full border border-line bg-surface-strong px-4 py-2 text-sm font-semibold" type="submit">
+                <button
+                  className="rounded-full border border-line bg-surface-strong px-4 py-2 text-sm font-semibold"
+                  type="submit"
+                >
                   {label}
                 </button>
               </form>
@@ -91,33 +111,47 @@ export default async function PublicChatPage({
                 placeholder="発送時期、返品ルール、商品仕様、注文トラブルなどを入力してください"
               />
             </label>
-            <button className="inline-flex w-fit rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white" type="submit">
+            <button
+              className="inline-flex w-fit rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white"
+              type="submit"
+            >
               問い合わせる
             </button>
           </form>
 
-          {!isOwnerPreview ? (
-            <p className="mt-4 text-sm leading-7 text-muted">
-              `demo-shop` は公開デモです。問い合わせ履歴の保存は owner preview で確認できます。
-            </p>
-          ) : null}
+          <p className="mt-4 text-sm leading-7 text-muted">
+            {isDemoMode && !isOwnerPreview
+              ? "`demo-shop` は静的なローカル確認用デモです。永続保存は seller の owner preview か本番モードで確認してください。"
+              : "公開問い合わせは分類結果と要約付きで inbox に保存されます。"}
+          </p>
         </SectionCard>
 
         <SectionCard
           eyebrow="Conversation"
           title="一次受け履歴"
-          description="保存済みの問い合わせから、分類・返信・引き継ぎ方針を見えます。owner preview なら送信結果がここに反映されます。"
+          description="保存済みの問い合わせから、分類・返信・引き継ぎ方針を確認できます。owner preview でも公開導線でもここに反映されます。"
         >
           <div className="space-y-4">
             {recentInquiries.map((inquiry) => {
               const category = intakeCategoryByCode[inquiry.categoryCode];
 
               return (
-                <div key={inquiry.id} className="rounded-[1.6rem] border border-line bg-surface-strong px-4 py-4">
+                <div
+                  key={inquiry.id}
+                  className="rounded-[1.6rem] border border-line bg-surface-strong px-4 py-4"
+                >
                   <p className="text-sm text-muted">user</p>
                   <p className="mt-2 text-sm leading-6">{inquiry.rawMessage}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <StatusBadge tone={inquiry.notificationMode === "urgent" ? "warning" : inquiry.notificationMode === "summary" ? "accent" : "neutral"}>
+                    <StatusBadge
+                      tone={
+                        inquiry.notificationMode === "urgent"
+                          ? "warning"
+                          : inquiry.notificationMode === "summary"
+                            ? "accent"
+                            : "neutral"
+                      }
+                    >
                       {category?.label ?? inquiry.categoryCode}
                     </StatusBadge>
                     <StatusBadge tone="neutral">{inquiry.handlingMode}</StatusBadge>

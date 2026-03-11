@@ -1,32 +1,46 @@
 import Link from "next/link";
+
 import { adminRoutes, intakeCategories, sellerTypes } from "@ichijiuke/domain";
 import { MetricCard, SectionCard, StatusBadge } from "@ichijiuke/ui";
 
 import { logoutDemoAction } from "@/app/actions/auth";
-import { getDemoSession } from "@/lib/auth";
+import {
+  getDemoSession,
+  isDemoFallbackEnabled,
+  isProductionAuthEnabled,
+} from "@/lib/auth";
+import { getDemoWorkspace } from "@/lib/demo-workspace";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = await getDemoSession();
+  const isProductionAuth = isProductionAuthEnabled();
+  const isDemoMode = isDemoFallbackEnabled();
+  const workspace = session ? await getDemoWorkspace(session) : null;
+  const publicHref = (
+    workspace ? `/c/${workspace.settings.publicSlug}` : isDemoMode ? "/c/demo-shop" : "/signup"
+  ) as never;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-6 py-10 lg:px-10">
       <section className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <SectionCard
           eyebrow="Workspace"
-          title="Ichijiuke MVP scaffold"
-          description="seller/admin と public chat を1つの Next.js App Router アプリで持ち、共有契約と UI を workspace package に切り出した初期土台です。"
+          title="Ichijiuke operations hub"
+          description="seller/admin と public chat を1つの Next.js App Router アプリで運用し、shared contract と persistence を workspace package に分けています。"
         >
           <div className="flex flex-wrap gap-2">
-            <StatusBadge tone="accent">leader: xhigh 相当</StatusBadge>
-            <StatusBadge tone="neutral">workers: high 相当</StatusBadge>
-            <StatusBadge tone="warning">MVP first</StatusBadge>
+            <StatusBadge tone="accent">
+              {isProductionAuth ? "production mode" : "local demo mode"}
+            </StatusBadge>
+            <StatusBadge tone="neutral">Next.js + Postgres</StatusBadge>
+            <StatusBadge tone="warning">seller ops</StatusBadge>
             {session ? <StatusBadge tone="accent">{session.email}</StatusBadge> : null}
           </div>
           {session ? (
             <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-muted">
-              <p>demo session: {session.displayName}</p>
+              <p>signed in: {session.displayName}</p>
               <form action={logoutDemoAction}>
                 <button className="font-semibold text-accent" type="submit">
                   sign out
@@ -40,10 +54,11 @@ export default async function Home() {
             <MetricCard label="categories" value={String(intakeCategories.length)} note="初期マスタ" />
           </div>
         </SectionCard>
+
         <SectionCard
           eyebrow="Stack"
           title="最小 package 分割"
-          description="Web app は1つ、共有責務は package 化。過分割は避けて、10人が同時に触っても衝突しにくい境界だけ残します。"
+          description="Web app は1つ、shared responsibility だけ package 化。運用に必要な責務だけを分けて、衝突面を減らしています。"
         >
           <ul className="space-y-3 text-sm text-muted">
             <li>`apps/web`: admin と public chat の実画面</li>
@@ -58,17 +73,27 @@ export default async function Home() {
       <section className="grid gap-4 lg:grid-cols-3">
         <Link href={session ? "/setup" : "/signup"}>
           <SectionCard eyebrow="Entry" title="販売者導線" description="登録画面と公開までの最短導線を確認する。">
-            <p className="text-sm text-muted">{session ? "`/setup` へ直行" : "`/signup` と `/setup` を先行着手"}</p>
+            <p className="text-sm text-muted">
+              {session ? "`/setup` へ直行" : "まず `/signup` で seller account を作成"}
+            </p>
           </SectionCard>
         </Link>
         <Link href={session ? "/dashboard" : "/login"}>
           <SectionCard eyebrow="Admin" title="管理画面" description="ダッシュボード、設定、履歴の導線を俯瞰する。">
-            <p className="text-sm text-muted">{session ? "demo session で入場可能" : "未ログイン時は `/login` へ誘導"}</p>
+            <p className="text-sm text-muted">
+              {session ? "signed session で入場可能" : "未ログイン時は `/login` へ誘導"}
+            </p>
           </SectionCard>
         </Link>
-        <Link href="/c/demo-shop">
+        <Link href={publicHref}>
           <SectionCard eyebrow="Public" title="公開チャット" description="購入者向けの一次受け体験を見る。">
-            <p className="text-sm text-muted">`/c/[slug]` で public surface を分離</p>
+            <p className="text-sm text-muted">
+              {workspace
+                ? `現在の公開導線: /c/${workspace.settings.publicSlug}`
+                : isDemoMode
+                  ? "開発環境では `/c/demo-shop` を即時確認可能"
+                  : "公開 URL は seller ごとの slug で発行"}
+            </p>
           </SectionCard>
         </Link>
       </section>
@@ -96,7 +121,10 @@ export default async function Home() {
         >
           <div className="grid gap-3">
             {intakeCategories.slice(0, 4).map((category) => (
-              <div key={category.code} className="flex items-start justify-between gap-4 rounded-3xl border border-line bg-surface px-4 py-4">
+              <div
+                key={category.code}
+                className="flex items-start justify-between gap-4 rounded-3xl border border-line bg-surface px-4 py-4"
+              >
                 <div>
                   <p className="font-semibold">{category.label}</p>
                   <p className="mt-1 text-sm text-muted">{category.summary}</p>
